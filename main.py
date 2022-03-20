@@ -10,6 +10,8 @@ import torchinfo
 # TODO: add batch normalization to network.
 # TODO: periodic boundaries: in network or in input, but before the first convolution >1 over the spatial dimensions.
 # TODO: implement zero padding variations for comparing long and short patterns.
+# TODO: data augmentation: double amount of data if we can assume symmetric left and right on top/bottom of the arm.
+# TODO: implement chamfer similarity calculation.
 
 class CustomImageDataset(torch.utils.data.Dataset):
     def __init__(self, combinations, similarities, pattern_dir):
