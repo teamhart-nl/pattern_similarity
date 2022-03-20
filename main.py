@@ -76,6 +76,9 @@ class NeuralNetwork(torch.nn.Module):
 
         if self.network_option == 'image_compare':
             x = torch.sub(x0, x1)
+
+            # To ensure the commutative property of the input.
+            x = torch.abs(x)
             x = self.layers_combined(x)
             x = torch.squeeze(x)
         elif self.network_option == 'embedding':
