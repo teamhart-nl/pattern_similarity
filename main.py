@@ -53,6 +53,7 @@ class NeuralNetwork(torch.nn.Module):
                 torch.nn.ReLU(),
                 torch.nn.Linear(100, 25),
             )
+            self.pairwise_distance = torch.nn.PairwiseDistance()
         elif self.network_option == 'image_compare':
             self.layers_combined = torch.nn.Sequential(
                 torch.nn.Conv3d(16, 32, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
@@ -88,8 +89,7 @@ class NeuralNetwork(torch.nn.Module):
             x0 = torch.nn.functional.normalize(x0)
             x1 = torch.nn.functional.normalize(x1)
 
-            pdist = torch.nn.PairwiseDistance()
-            distance = pdist(x0, x1)
+            distance = self.pairwise_distance(x0, x1)
 
             # Maximum Euclidean distance of two normalized vectors is two, therefore the distance is divided by two.
             x = 1 - distance / 2
