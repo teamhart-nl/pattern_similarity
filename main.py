@@ -32,8 +32,9 @@ class CustomImageDataset(torch.utils.data.Dataset):
 
 
 class NeuralNetwork(torch.nn.Module):
-    def __init__(self):
+    def __init__(self,network_option):
         super(NeuralNetwork, self).__init__()
+        self.network_option = network_option
 
         # TODO: periodic boundaries: in network or in input data.
         # TODO: max pooling in the temporal dimension.
@@ -45,27 +46,53 @@ class NeuralNetwork(torch.nn.Module):
             torch.nn.ReLU(),
         )
 
-        self.layers_combined = torch.nn.Sequential(
-            torch.nn.Conv3d(16, 32, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-            torch.nn.ReLU(),
-            torch.nn.Conv3d(32, 64, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-            torch.nn.ReLU(),
-            torch.nn.Flatten(),
-            torch.nn.Linear(64 * 37 * 6 * 4, 25),
-            torch.nn.ReLU(),
-            torch.nn.Linear(25, 10),
-            torch.nn.ReLU(),
-            torch.nn.Linear(10, 1),
-            torch.nn.Sigmoid()
-        )
+        if self.network_option == 'embedding':
+            self.layers_individual_embedding = torch.nn.Sequential(
+                torch.nn.Flatten(),
+                torch.nn.Linear(16 * 37 * 6 * 4, 100),
+                torch.nn.ReLU(),
+                torch.nn.Linear(100, 25),
+            )
+        elif self.network_option == 'image_compare':
+            self.layers_combined = torch.nn.Sequential(
+                torch.nn.Conv3d(16, 32, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
+                torch.nn.ReLU(),
+                torch.nn.Conv3d(32, 64, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
+                torch.nn.ReLU(),
+                torch.nn.Flatten(),
+                torch.nn.Linear(64 * 37 * 6 * 4, 25),
+                torch.nn.ReLU(),
+                torch.nn.Linear(25, 10),
+                torch.nn.ReLU(),
+                torch.nn.Linear(10, 1),
+                torch.nn.Sigmoid()
+            )
+        else:
+            raise ValueError('Network option does not exist.')
 
     def forward(self, x0, x1):
         x0 = self.layers_individual(x0)
         x1 = self.layers_individual(x1)
 
-        x = torch.sub(x0, x1)
-        x = self.layers_combined(x)
-        x = torch.squeeze(x)
+        if self.network_option == 'image_compare':
+            x = torch.sub(x0, x1)
+            x = self.layers_combined(x)
+            x = torch.squeeze(x)
+        elif self.network_option == 'embedding':
+            x0 = self.layers_individual_embedding(x0)
+            x1 = self.layers_individual_embedding(x1)
+
+            x0 = torch.nn.functional.normalize(x0)
+            x1 = torch.nn.functional.normalize(x1)
+
+            pdist = torch.nn.PairwiseDistance()
+            distance = pdist(x0, x1)
+
+            # Maximum Euclidean distance of two normalized vectors is two, therefore the distance is divided by two.
+            x = 1 - distance / 2
+        else:
+            raise ValueError('Network option does not exist.')
+
         return x
 
 
@@ -169,7 +196,9 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
 
-    model = NeuralNetwork().to(device)
+    network_option = 'image_compare'
+
+    model = NeuralNetwork(network_option=network_option).to(device)
 
     torchinfo.summary(model, input_size=[(batch_size, 1, num_frames, 6, 4), (batch_size, 1, num_frames, 6, 4)],
                       verbose=2)
@@ -201,9 +230,9 @@ def main():
     ax.set_ylim(bottom=0)
     plt.show()
 
-    model_name = 'model.pth'
+    model_name = f'model_{network_option}.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork()
+    model = NeuralNetwork(network_option=network_option)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
@@ -211,7 +240,7 @@ def main():
     with torch.no_grad():
         for p0, p1, y in test_dataloader:
             output = model(p0.float(), p1.float())
-            print(f'Output: {output:.2f}, expected: {y.item():.2f}')
+            print(f'Output: {output.item():.2f}, expected: {y.item():.2f}')
 
 
 if __name__ == '__main__':
