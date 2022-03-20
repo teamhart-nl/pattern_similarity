@@ -6,6 +6,7 @@ import torch.nn.functional
 import torch.utils.data
 import torchinfo
 
+
 # TODO: add dropout to network.
 # TODO: add batch normalization to network.
 # TODO: periodic boundaries: in network or in input, but before the first convolution >1 over the spatial dimensions.
@@ -53,7 +54,7 @@ class NeuralNetwork(torch.nn.Module):
         if self.network_option == 'embedding':
             self.layers_individual_embedding = torch.nn.Sequential(
                 torch.nn.Flatten(),
-                torch.nn.Linear(16 * round(num_frames/2) * 6 * 4, 100),
+                torch.nn.Linear(16 * round(num_frames / 2) * 6 * 4, 100),
                 torch.nn.ReLU(),
                 torch.nn.Linear(100, 25),
             )
@@ -66,7 +67,7 @@ class NeuralNetwork(torch.nn.Module):
                 torch.nn.ReLU(),
                 torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
                 torch.nn.Flatten(),
-                torch.nn.Linear(64 * round(num_frames/4) * 6 * 4, 25),
+                torch.nn.Linear(64 * round(num_frames / 4) * 6 * 4, 25),
                 torch.nn.ReLU(),
                 torch.nn.Linear(25, 10),
                 torch.nn.ReLU(),
@@ -214,7 +215,7 @@ def main():
 
     network_option = 'image_compare'
 
-    model = NeuralNetwork(network_option=network_option,num_frames=num_frames).to(device)
+    model = NeuralNetwork(network_option=network_option, num_frames=num_frames).to(device)
 
     torchinfo.summary(model, input_size=[(batch_size, 1, num_frames, 6, 4), (batch_size, 1, num_frames, 6, 4)],
                       verbose=2)
@@ -248,7 +249,7 @@ def main():
 
     model_name = f'model_{network_option}.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork(network_option=network_option,num_frames=num_frames)
+    model = NeuralNetwork(network_option=network_option, num_frames=num_frames)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
