@@ -6,6 +6,10 @@ import torch.nn.functional
 import torch.utils.data
 import torchinfo
 
+# TODO: add dropout to network.
+# TODO: add batch normalization to network.
+# TODO: periodic boundaries: in network or in input, but before the first convolution >1 over the spatial dimensions.
+# TODO: implement zero padding variations for comparing long and short patterns.
 
 class CustomImageDataset(torch.utils.data.Dataset):
     def __init__(self, combinations, similarities, pattern_dir):
@@ -35,8 +39,6 @@ class NeuralNetwork(torch.nn.Module):
     def __init__(self, network_option, num_frames):
         super(NeuralNetwork, self).__init__()
         self.network_option = network_option
-
-        # TODO: periodic boundaries: in network or in input data.
 
         self.layers_individual = torch.nn.Sequential(
             torch.nn.Conv3d(1, 8, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
