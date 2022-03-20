@@ -244,12 +244,20 @@ def main():
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
 
+    errors = []
     with torch.no_grad():
         for x0, x1, true_value in test_dataloader:
             prediction = model(x0.float(), x1.float())
             prediction_item = prediction.item()
             true_value_item = true_value.item()
             print(f'Prediction: {prediction_item:.2f}, true value: {true_value_item:.2f}')
+            errors.append(prediction_item-true_value_item)
+
+    fig, ax = plt.subplots()
+    ax.hist(errors,bins=200,range=(-1,1))
+    ax.set_xlabel('Errors')
+    ax.set_ylabel('Number of occurences')
+    plt.show()
 
 
 if __name__ == '__main__':
