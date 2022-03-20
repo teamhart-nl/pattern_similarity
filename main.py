@@ -32,24 +32,24 @@ class CustomImageDataset(torch.utils.data.Dataset):
 
 
 class NeuralNetwork(torch.nn.Module):
-    def __init__(self, network_option):
+    def __init__(self, network_option, num_frames):
         super(NeuralNetwork, self).__init__()
         self.network_option = network_option
 
         # TODO: periodic boundaries: in network or in input data.
-        # TODO: max pooling in the temporal dimension.
 
         self.layers_individual = torch.nn.Sequential(
-            torch.nn.Conv3d(1, 8, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
+            torch.nn.Conv3d(1, 8, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
             torch.nn.ReLU(),
-            torch.nn.Conv3d(8, 16, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
+            torch.nn.Conv3d(8, 16, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
             torch.nn.ReLU(),
+            torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
         )
 
         if self.network_option == 'embedding':
             self.layers_individual_embedding = torch.nn.Sequential(
                 torch.nn.Flatten(),
-                torch.nn.Linear(16 * 37 * 6 * 4, 100),
+                torch.nn.Linear(16 * round(num_frames/2) * 6 * 4, 100),
                 torch.nn.ReLU(),
                 torch.nn.Linear(100, 25),
             )
@@ -60,8 +60,9 @@ class NeuralNetwork(torch.nn.Module):
                 torch.nn.ReLU(),
                 torch.nn.Conv3d(32, 64, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
                 torch.nn.ReLU(),
+                torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
                 torch.nn.Flatten(),
-                torch.nn.Linear(64 * 37 * 6 * 4, 25),
+                torch.nn.Linear(64 * round(num_frames/4) * 6 * 4, 25),
                 torch.nn.ReLU(),
                 torch.nn.Linear(25, 10),
                 torch.nn.ReLU(),
@@ -145,7 +146,11 @@ def validate(dataloader, model, loss_fn, device):
 
 def main():
     # Totally random patterns.
-    num_frames = 37
+    num_frames = 32
+
+    if num_frames % 8 != 0:
+        raise ValueError('Number of frames should be evenly divisible be 8.')
+
     pattern0 = np.random.randint(0, 255, size=(1, num_frames, 6, 4)) / 255
     pattern1 = np.random.randint(0, 255, size=(1, num_frames, 6, 4)) / 255
     pattern2 = pattern0
@@ -205,7 +210,7 @@ def main():
 
     network_option = 'image_compare'
 
-    model = NeuralNetwork(network_option=network_option).to(device)
+    model = NeuralNetwork(network_option=network_option,num_frames=num_frames).to(device)
 
     torchinfo.summary(model, input_size=[(batch_size, 1, num_frames, 6, 4), (batch_size, 1, num_frames, 6, 4)],
                       verbose=2)
@@ -239,7 +244,7 @@ def main():
 
     model_name = f'model_{network_option}.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork(network_option=network_option)
+    model = NeuralNetwork(network_option=network_option,num_frames=num_frames)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
