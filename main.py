@@ -242,8 +242,10 @@ def main():
 
     with torch.no_grad():
         for p0, p1, y in test_dataloader:
-            output = model(p0.float(), p1.float())
-            print(f'Output: {output.item():.2f}, expected: {y.item():.2f}')
+            prediction = model(p0.float(), p1.float())
+            prediction_item = prediction.item()
+            true_value_item = y.item()
+            print(f'Prediction: {prediction_item:.2f}, true value: {true_value_item:.2f}')
 
 
 if __name__ == '__main__':
