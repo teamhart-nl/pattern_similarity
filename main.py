@@ -45,9 +45,9 @@ class NeuralNetwork(torch.nn.Module):
 
         self.layers_individual = torch.nn.Sequential(
             torch.nn.Conv3d(1, 8, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.Conv3d(8, 16, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
-            torch.nn.ReLU(),
+            torch.nn.LeakyReLU(),
             torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
         )
 
@@ -55,22 +55,22 @@ class NeuralNetwork(torch.nn.Module):
             self.layers_individual_embedding = torch.nn.Sequential(
                 torch.nn.Flatten(),
                 torch.nn.Linear(16 * round(num_frames / 2) * 6 * 4, 100),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(),
                 torch.nn.Linear(100, 25),
             )
             self.pairwise_distance = torch.nn.PairwiseDistance()
         elif self.network_option == 'image_compare':
             self.layers_combined = torch.nn.Sequential(
                 torch.nn.Conv3d(16, 32, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(),
                 torch.nn.Conv3d(32, 64, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(),
                 torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
                 torch.nn.Flatten(),
                 torch.nn.Linear(64 * round(num_frames / 4) * 6 * 4, 25),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(),
                 torch.nn.Linear(25, 10),
-                torch.nn.ReLU(),
+                torch.nn.LeakyReLU(),
                 torch.nn.Linear(10, 1),
                 torch.nn.Sigmoid()
             )
