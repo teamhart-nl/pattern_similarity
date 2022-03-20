@@ -32,7 +32,7 @@ class CustomImageDataset(torch.utils.data.Dataset):
 
 
 class NeuralNetwork(torch.nn.Module):
-    def __init__(self,network_option):
+    def __init__(self, network_option):
         super(NeuralNetwork, self).__init__()
         self.network_option = network_option
 
@@ -251,10 +251,10 @@ def main():
             prediction_item = prediction.item()
             true_value_item = true_value.item()
             print(f'Prediction: {prediction_item:.2f}, true value: {true_value_item:.2f}')
-            errors.append(prediction_item-true_value_item)
+            errors.append(prediction_item - true_value_item)
 
     fig, ax = plt.subplots()
-    ax.hist(errors,bins=200,range=(-1,1))
+    ax.hist(errors, bins=200, range=(-1, 1))
     ax.set_xlabel('Errors')
     ax.set_ylabel('Number of occurences')
     plt.show()
