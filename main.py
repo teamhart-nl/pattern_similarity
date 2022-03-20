@@ -103,12 +103,12 @@ def train(dataloader, model, loss_fn, optimizer, device):
     num_batches = len(dataloader)
     model.train()
     training_loss = 0
-    for batch, (x0, x1, y) in enumerate(dataloader):
-        x0, x1, y = x0.to(device), x1.to(device), y.to(device)
+    for batch, (x0, x1, true_value) in enumerate(dataloader):
+        x0, x1, true_value = x0.to(device), x1.to(device), true_value.to(device)
 
-        output = model(x0.float(), x1.float())
+        prediction = model(x0.float(), x1.float())
 
-        loss = loss_fn(output, y)
+        loss = loss_fn(prediction, true_value)
         training_loss += loss.item()
 
         # Backpropagation
@@ -126,12 +126,12 @@ def validate(dataloader, model, loss_fn, device):
     model.eval()
     validation_loss = 0
     with torch.no_grad():
-        for x0, x1, y in dataloader:
-            x0, x1, y = x0.to(device), x1.to(device), y.to(device)
+        for x0, x1, true_value in dataloader:
+            x0, x1, true_value = x0.to(device), x1.to(device), true_value.to(device)
 
-            output = model(x0.float(), x1.float())
+            prediction = model(x0.float(), x1.float())
 
-            loss = loss_fn(output, y)
+            loss = loss_fn(prediction, true_value)
             validation_loss += loss.item()
 
     validation_loss /= num_batches
@@ -190,10 +190,10 @@ def main():
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, batch_size=batch_size, shuffle=True)
 
-    for p0, p1, y in train_dataloader:
-        print(f'Shape of p0: {p0.shape}')
-        print(f'Shape of p1: {p1.shape}')
-        print(f'Shape of y: {y.shape} with type {y.dtype}')
+    for x0, x1, true_value in train_dataloader:
+        print(f'Shape of p0: {x0.shape}')
+        print(f'Shape of p1: {x1.shape}')
+        print(f'Shape of true value: {true_value.shape} with type {true_value.dtype}')
         break
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -241,10 +241,10 @@ def main():
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
 
     with torch.no_grad():
-        for p0, p1, y in test_dataloader:
-            prediction = model(p0.float(), p1.float())
+        for x0, x1, true_value in test_dataloader:
+            prediction = model(x0.float(), x1.float())
             prediction_item = prediction.item()
-            true_value_item = y.item()
+            true_value_item = true_value.item()
             print(f'Prediction: {prediction_item:.2f}, true value: {true_value_item:.2f}')
 
 
