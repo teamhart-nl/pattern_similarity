@@ -104,9 +104,11 @@ def train(dataloader, model, loss_fn, optimizer, device):
     model.train()
     training_loss = 0
     for batch, (x0, x1, true_value) in enumerate(dataloader):
-        x0, x1, true_value = x0.to(device), x1.to(device), true_value.to(device)
+        x0 = x0.float().to(device)
+        x1 = x1.float().to(device)
+        true_value = true_value.float().to(device)
 
-        prediction = model(x0.float(), x1.float())
+        prediction = model(x0, x1)
 
         loss = loss_fn(prediction, true_value)
         training_loss += loss.item()
@@ -127,9 +129,11 @@ def validate(dataloader, model, loss_fn, device):
     validation_loss = 0
     with torch.no_grad():
         for x0, x1, true_value in dataloader:
-            x0, x1, true_value = x0.to(device), x1.to(device), true_value.to(device)
+            x0 = x0.float().to(device)
+            x1 = x1.float().to(device)
+            true_value = true_value.float().to(device)
 
-            prediction = model(x0.float(), x1.float())
+            prediction = model(x0, x1)
 
             loss = loss_fn(prediction, true_value)
             validation_loss += loss.item()
