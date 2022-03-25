@@ -15,7 +15,7 @@ import torchinfo
 # TODO: implement chamfer similarity calculation.
 
 class CustomImageDataset(torch.utils.data.Dataset):
-    def __init__(self, combinations, similarities, pattern_dir):
+    def __init__(self, combinations, similarities, pattern_dir, num_frames_long, num_frames_short):
         if len(combinations) != len(similarities):
             raise ValueError('Number of combinations and similarity scores do not match.')
 
@@ -23,17 +23,61 @@ class CustomImageDataset(torch.utils.data.Dataset):
         self.similarities = similarities
         self.pattern_dir = pattern_dir
 
+        self.num_frames_long = num_frames_long
+        self.num_frames_short = num_frames_short
+        self.num_single_shifts = num_frames_long - num_frames_short + 1
+        self.num_shifts = self.num_single_shifts ** 2
+
     def __len__(self):
-        return len(self.similarities)
+        return len(self.similarities)*self.num_shifts
+
 
     def __getitem__(self, idx):
-        pattern0_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][0]))
-        pattern1_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][1]))
+        i = idx // self.num_shifts
+
+        pattern0_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[i][0]))
+        pattern1_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[i][1]))
 
         pattern0 = np.load(pattern0_path)
         pattern1 = np.load(pattern1_path)
 
-        similarity = self.similarities[idx]
+        length0 = np.shape(pattern0)[1]
+        length1 = np.shape(pattern1)[1]
+
+        which_shift = idx % self.num_shifts
+        which_single_shift = which_shift % self.num_single_shifts
+        which_single_shift_other = which_shift // self.num_single_shifts
+
+        if (length0 == self.num_frames_long) and (length1 == self.num_frames_long):
+            # No change necessary for 0 and 1.
+            pattern0 = pattern0
+            pattern1 = pattern1
+        elif (length0 == self.num_frames_long) and (length1 == self.num_frames_short):
+            # No change necessary for 0.
+            pattern0 = pattern0
+
+            pattern1_base = np.zeros_like(pattern0)
+            pattern1_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern1
+            pattern1 = pattern1_base
+        elif (length0 == self.num_frames_short) and (length1 == self.num_frames_long):
+            # No change necessary for 1.
+            pattern1 = pattern1
+
+            pattern0_base = np.zeros_like(pattern1)
+            pattern0_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern0
+            pattern0 = pattern0_base
+        elif (length0 == self.num_frames_short) and (length1 == self.num_frames_short):
+            pattern0_base = np.zeros((1,self.num_frames_long,6,4))
+            pattern0_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern0
+            pattern0 = pattern0_base
+
+            pattern1_base = np.zeros((1,self.num_frames_long,6,4))
+            pattern1_base[:,which_single_shift_other:(which_single_shift_other+self.num_frames_short),:,:] = pattern1
+            pattern1 = pattern1_base
+        else:
+            raise ValueError('Length should be either short or long.')
+
+        similarity = self.similarities[i]
 
         return pattern0, pattern1, similarity
 
@@ -151,13 +195,14 @@ def validate(dataloader, model, loss_fn, device):
 
 def main():
     # Totally random patterns.
-    num_frames = 32
+    num_frames_long = 80
+    num_frames_short = 72
 
-    if num_frames % 8 != 0:
+    if (num_frames_long % 8 != 0) or (num_frames_short % 8 != 0):
         raise ValueError('Number of frames should be evenly divisible be 8.')
 
-    pattern0 = np.random.randint(0, 255, size=(1, num_frames, 6, 4)) / 255
-    pattern1 = np.random.randint(0, 255, size=(1, num_frames, 6, 4)) / 255
+    pattern0 = np.random.randint(0, 255, size=(1, num_frames_long, 6, 4)) / 255
+    pattern1 = np.random.randint(0, 255, size=(1, num_frames_short, 6, 4)) / 255
     pattern2 = pattern0
     pattern3 = pattern0
     pattern4 = pattern1
@@ -179,7 +224,7 @@ def main():
 
     pattern_dir = 'data'
 
-    dataset = CustomImageDataset(combinations, similarities, pattern_dir)
+    dataset = CustomImageDataset(combinations, similarities, pattern_dir, num_frames_long, num_frames_short)
 
     train_val_test_split = [0.6, 0.2, 0.2]
 
@@ -190,6 +235,8 @@ def main():
     test_size = int(train_val_test_split[2] * num_data_points)
     validation_size = int(train_val_test_split[1] * num_data_points)
     train_size = num_data_points - test_size - validation_size
+
+    # TODO: Maybe not completely independent set because of the switching of lengths.
     train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset,
                                                                                     [train_size, validation_size,
                                                                                      test_size])
@@ -199,7 +246,7 @@ def main():
     print(f'Num validation data points: {len(validation_dataset)}')
     print(f'Num test data points: {len(test_dataset)}')
 
-    batch_size = 32
+    batch_size = 512
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, batch_size=batch_size, shuffle=True)
@@ -215,9 +262,9 @@ def main():
 
     network_option = 'image_compare'
 
-    model = NeuralNetwork(network_option=network_option, num_frames=num_frames).to(device)
+    model = NeuralNetwork(network_option=network_option, num_frames=num_frames_long).to(device)
 
-    torchinfo.summary(model, input_size=[(batch_size, 1, num_frames, 6, 4), (batch_size, 1, num_frames, 6, 4)],
+    torchinfo.summary(model, input_size=[(batch_size, 1, num_frames_long, 6, 4), (batch_size, 1, num_frames_long, 6, 4)],
                       verbose=2)
 
     # More robust to outliers than mean squared error.
@@ -249,7 +296,7 @@ def main():
 
     model_name = f'model_{network_option}.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork(network_option=network_option, num_frames=num_frames)
+    model = NeuralNetwork(network_option=network_option, num_frames=num_frames_long)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
