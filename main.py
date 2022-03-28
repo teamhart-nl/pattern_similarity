@@ -83,9 +83,8 @@ class CustomImageDataset(torch.utils.data.Dataset):
 
 
 class NeuralNetwork(torch.nn.Module):
-    def __init__(self, network_option, num_frames):
+    def __init__(self, num_frames):
         super(NeuralNetwork, self).__init__()
-        self.network_option = network_option
 
         self.layers_individual = torch.nn.Sequential(
             torch.nn.Conv3d(1, 8, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
@@ -95,56 +94,28 @@ class NeuralNetwork(torch.nn.Module):
             torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
         )
 
-        if self.network_option == 'embedding':
-            self.layers_individual_embedding = torch.nn.Sequential(
-                torch.nn.Flatten(),
-                torch.nn.Linear(16 * round(num_frames / 2) * 6 * 4, 100),
-                torch.nn.LeakyReLU(),
-                torch.nn.Linear(100, 25),
-            )
-            self.pairwise_distance = torch.nn.PairwiseDistance()
-        elif self.network_option == 'image_compare':
-            self.layers_combined = torch.nn.Sequential(
-                torch.nn.Conv3d(16, 32, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-                torch.nn.LeakyReLU(),
-                torch.nn.Conv3d(32, 64, kernel_size=(5, 3, 3), stride=(1, 1, 1), padding=(2, 1, 1)),
-                torch.nn.LeakyReLU(),
-                torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
-                torch.nn.Flatten(),
-                torch.nn.Linear(64 * round(num_frames / 4) * 6 * 4, 25),
-                torch.nn.LeakyReLU(),
-                torch.nn.Linear(25, 10),
-                torch.nn.LeakyReLU(),
-                torch.nn.Linear(10, 1),
-                torch.nn.Sigmoid()
-            )
-        else:
-            raise ValueError('Network option does not exist.')
+        self.layers_individual_embedding = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(16 * round(num_frames / 2) * 6 * 4, 100),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(100, 25),
+        )
+        self.pairwise_distance = torch.nn.PairwiseDistance()
 
     def forward(self, x0, x1):
         x0 = self.layers_individual(x0)
         x1 = self.layers_individual(x1)
 
-        if self.network_option == 'image_compare':
-            x = torch.sub(x0, x1)
+        x0 = self.layers_individual_embedding(x0)
+        x1 = self.layers_individual_embedding(x1)
 
-            # To ensure the commutative property of the input.
-            x = torch.abs(x)
-            x = self.layers_combined(x)
-            x = torch.squeeze(x)
-        elif self.network_option == 'embedding':
-            x0 = self.layers_individual_embedding(x0)
-            x1 = self.layers_individual_embedding(x1)
+        x0 = torch.nn.functional.normalize(x0)
+        x1 = torch.nn.functional.normalize(x1)
 
-            x0 = torch.nn.functional.normalize(x0)
-            x1 = torch.nn.functional.normalize(x1)
+        distance = self.pairwise_distance(x0, x1)
 
-            distance = self.pairwise_distance(x0, x1)
-
-            # Maximum Euclidean distance of two normalized vectors is two, therefore the distance is divided by two.
-            x = 1 - distance / 2
-        else:
-            raise ValueError('Network option does not exist.')
+        # Maximum Euclidean distance of two normalized vectors is two, therefore the distance is divided by two.
+        x = 1 - distance / 2
 
         return x
 
@@ -260,9 +231,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
 
-    network_option = 'image_compare'
-
-    model = NeuralNetwork(network_option=network_option, num_frames=num_frames_long).to(device)
+    model = NeuralNetwork(num_frames=num_frames_long).to(device)
 
     torchinfo.summary(model, input_size=[(batch_size, 1, num_frames_long, 6, 4), (batch_size, 1, num_frames_long, 6, 4)],
                       verbose=2)
@@ -272,7 +241,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters())
 
-    num_epochs = 50
+    num_epochs = 5
     epochs = np.arange(1, num_epochs + 1)
     training_losses = np.zeros(num_epochs)
     validation_losses = np.zeros(num_epochs)
@@ -294,9 +263,9 @@ def main():
     ax.set_ylim(bottom=0)
     plt.show()
 
-    model_name = f'model_{network_option}.pth'
+    model_name = 'model.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork(network_option=network_option, num_frames=num_frames_long)
+    model = NeuralNetwork(num_frames=num_frames_long)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
