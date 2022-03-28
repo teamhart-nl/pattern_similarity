@@ -1,21 +1,22 @@
 import os
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional
 import torch.utils.data
 import torchinfo
+import torchvision.transforms
 
 
 # TODO: add dropout to network.
 # TODO: add batch normalization to network.
 # TODO: periodic boundaries: in network or in input, but before the first convolution >1 over the spatial dimensions.
-# TODO: implement zero padding variations for comparing long and short patterns.
 # TODO: data augmentation: double amount of data if we can assume symmetric left and right on top/bottom of the arm.
 # TODO: implement chamfer similarity calculation.
 
 class CustomImageDataset(torch.utils.data.Dataset):
-    def __init__(self, combinations, similarities, pattern_dir, num_frames_long, num_frames_short):
+    def __init__(self, combinations, similarities, pattern_dir, transform):
         if len(combinations) != len(similarities):
             raise ValueError('Number of combinations and similarity scores do not match.')
 
@@ -23,63 +24,51 @@ class CustomImageDataset(torch.utils.data.Dataset):
         self.similarities = similarities
         self.pattern_dir = pattern_dir
 
-        self.num_frames_long = num_frames_long
-        self.num_frames_short = num_frames_short
-        self.num_single_shifts = num_frames_long - num_frames_short + 1
-        self.num_shifts = self.num_single_shifts ** 2
+        self.transform = transform
 
     def __len__(self):
-        return len(self.similarities)*self.num_shifts
-
+        return len(self.similarities)
 
     def __getitem__(self, idx):
-        i = idx // self.num_shifts
-
-        pattern0_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[i][0]))
-        pattern1_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[i][1]))
+        pattern0_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][0]))
+        pattern1_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][1]))
 
         pattern0 = np.load(pattern0_path)
         pattern1 = np.load(pattern1_path)
 
-        length0 = np.shape(pattern0)[1]
-        length1 = np.shape(pattern1)[1]
+        pattern0 = self.transform(pattern0)
+        pattern1 = self.transform(pattern1)
 
-        which_shift = idx % self.num_shifts
-        which_single_shift = which_shift % self.num_single_shifts
-        which_single_shift_other = which_shift // self.num_single_shifts
-
-        if (length0 == self.num_frames_long) and (length1 == self.num_frames_long):
-            # No change necessary for 0 and 1.
-            pattern0 = pattern0
-            pattern1 = pattern1
-        elif (length0 == self.num_frames_long) and (length1 == self.num_frames_short):
-            # No change necessary for 0.
-            pattern0 = pattern0
-
-            pattern1_base = np.zeros_like(pattern0)
-            pattern1_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern1
-            pattern1 = pattern1_base
-        elif (length0 == self.num_frames_short) and (length1 == self.num_frames_long):
-            # No change necessary for 1.
-            pattern1 = pattern1
-
-            pattern0_base = np.zeros_like(pattern1)
-            pattern0_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern0
-            pattern0 = pattern0_base
-        elif (length0 == self.num_frames_short) and (length1 == self.num_frames_short):
-            pattern0_base = np.zeros((1,self.num_frames_long,6,4))
-            pattern0_base[:,which_single_shift:(which_single_shift+self.num_frames_short),:,:] = pattern0
-            pattern0 = pattern0_base
-
-            pattern1_base = np.zeros((1,self.num_frames_long,6,4))
-            pattern1_base[:,which_single_shift_other:(which_single_shift_other+self.num_frames_short),:,:] = pattern1
-            pattern1 = pattern1_base
-        else:
-            raise ValueError('Length should be either short or long.')
-
-        similarity = self.similarities[i]
+        similarity = self.similarities[idx]
 
         return pattern0, pattern1, similarity
+
+
+class RandomPadding:
+    def __init__(self, num_frames_max, height, width):
+        self.num_frames_max = num_frames_max
+        self.height = height
+        self.width = width
+
+    def __call__(self, sample):
+        sample_shape = np.shape(sample)
+
+        num_frames = sample_shape[1]
+
+        assert sample_shape[0] == 1
+        assert num_frames <= self.num_frames_max
+        assert sample_shape[2] == self.height
+        assert sample_shape[3] == self.width
+
+        pattern = np.zeros((1, self.num_frames_max, self.height, self.width))
+
+        shift_max = self.num_frames_max - num_frames
+
+        shift = random.randint(0, shift_max)
+
+        pattern[:, shift:(shift + num_frames), :, :] = sample
+
+        return pattern
 
 
 class NeuralNetwork(torch.nn.Module):
@@ -195,7 +184,8 @@ def main():
 
     pattern_dir = 'data'
 
-    dataset = CustomImageDataset(combinations, similarities, pattern_dir, num_frames_long, num_frames_short)
+    dataset = CustomImageDataset(combinations, similarities, pattern_dir,
+                                 transform=torchvision.transforms.Compose([RandomPadding(num_frames_long, 6, 4)]))
 
     train_val_test_split = [0.6, 0.2, 0.2]
 
@@ -207,7 +197,6 @@ def main():
     validation_size = int(train_val_test_split[1] * num_data_points)
     train_size = num_data_points - test_size - validation_size
 
-    # TODO: Maybe not completely independent set because of the switching of lengths.
     train_dataset, validation_dataset, test_dataset = torch.utils.data.random_split(dataset,
                                                                                     [train_size, validation_size,
                                                                                      test_size])
@@ -233,7 +222,8 @@ def main():
 
     model = NeuralNetwork(num_frames=num_frames_long).to(device)
 
-    torchinfo.summary(model, input_size=[(batch_size, 1, num_frames_long, 6, 4), (batch_size, 1, num_frames_long, 6, 4)],
+    torchinfo.summary(model,
+                      input_size=[(batch_size, 1, num_frames_long, 6, 4), (batch_size, 1, num_frames_long, 6, 4)],
                       verbose=2)
 
     # More robust to outliers than mean squared error.
