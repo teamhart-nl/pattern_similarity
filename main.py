@@ -30,8 +30,8 @@ class CustomImageDataset(torch.utils.data.Dataset):
         return len(self.similarities)
 
     def __getitem__(self, idx):
-        pattern0_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][0]))
-        pattern1_path = os.path.join(self.pattern_dir, 'p{}.npy'.format(self.combinations[idx][1]))
+        pattern0_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.combinations[idx][0]))
+        pattern1_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.combinations[idx][1]))
 
         pattern0 = np.load(pattern0_path)
         pattern1 = np.load(pattern1_path)
@@ -56,17 +56,20 @@ class RandomPadding:
         num_frames = sample_shape[1]
 
         assert sample_shape[0] == 1
-        assert num_frames <= self.num_frames_max
         assert sample_shape[2] == self.height
         assert sample_shape[3] == self.width
 
-        pattern = np.zeros((1, self.num_frames_max, self.height, self.width))
+        if num_frames == self.num_frames_max:
+            pattern = sample
+        else:
+            assert num_frames <= self.num_frames_max
 
-        shift_max = self.num_frames_max - num_frames
+            pattern = np.zeros((1, self.num_frames_max, self.height, self.width))
 
-        shift = random.randint(0, shift_max)
+            shift_max = self.num_frames_max - num_frames
 
-        pattern[:, shift:(shift + num_frames), :, :] = sample
+            shift = random.randint(0, shift_max)
+            pattern[:, shift:(shift + num_frames), :, :] = sample
 
         return pattern
 
@@ -154,38 +157,23 @@ def validate(dataloader, model, loss_fn, device):
 
 
 def main():
-    # Totally random patterns.
-    num_frames_long = 80
-    num_frames_short = 72
+    num_frames_max = 80
 
-    if (num_frames_long % 8 != 0) or (num_frames_short % 8 != 0):
-        raise ValueError('Number of frames should be evenly divisible be 8.')
+    combinations = [(1, 2), (1, 3), (1, 4), (1, 5),
+                    (2, 3), (2, 4), (2, 5),
+                    (3, 4), (3, 5),
+                    (4, 5)]
 
-    pattern0 = np.random.randint(0, 255, size=(1, num_frames_long, 6, 4)) / 255
-    pattern1 = np.random.randint(0, 255, size=(1, num_frames_short, 6, 4)) / 255
-    pattern2 = pattern0
-    pattern3 = pattern0
-    pattern4 = pattern1
-
-    np.save('data/p0.npy', pattern0)
-    np.save('data/p1.npy', pattern1)
-    np.save('data/p2.npy', pattern2)
-    np.save('data/p3.npy', pattern3)
-    np.save('data/p4.npy', pattern4)
-
-    combinations = [(0, 1), (0, 2), (0, 3), (0, 4),
-                    (1, 2), (1, 3), (1, 4),
-                    (2, 3), (2, 4),
-                    (3, 4)]
-    similarities = [0.0, 1.0, 1.0, 0.0,
-                    0.0, 0.0, 1.0,
-                    1.0, 0.0,
-                    0.0]
+    # Guessed similarities.
+    similarities = [0.5, 0.1, 0.8, 0.4,
+                    0.9, 0.4, 0.1,
+                    0.5, 0.1,
+                    0.3]
 
     pattern_dir = 'data'
 
     dataset = CustomImageDataset(combinations, similarities, pattern_dir,
-                                 transform=torchvision.transforms.Compose([RandomPadding(num_frames_long, 6, 4)]))
+                                 transform=torchvision.transforms.Compose([RandomPadding(num_frames_max, 6, 4)]))
 
     train_val_test_split = [0.6, 0.2, 0.2]
 
@@ -220,10 +208,10 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
 
-    model = NeuralNetwork(num_frames=num_frames_long).to(device)
+    model = NeuralNetwork(num_frames=num_frames_max).to(device)
 
     torchinfo.summary(model,
-                      input_size=[(batch_size, 1, num_frames_long, 6, 4), (batch_size, 1, num_frames_long, 6, 4)],
+                      input_size=[(batch_size, 1, num_frames_max, 6, 4), (batch_size, 1, num_frames_max, 6, 4)],
                       verbose=2)
 
     # More robust to outliers than mean squared error.
@@ -231,7 +219,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters())
 
-    num_epochs = 5
+    num_epochs = 50
     epochs = np.arange(1, num_epochs + 1)
     training_losses = np.zeros(num_epochs)
     validation_losses = np.zeros(num_epochs)
@@ -250,12 +238,12 @@ def main():
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Average loss')
     ax.legend()
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=1)
     plt.show()
 
     model_name = 'model.pth'
     torch.save(model.state_dict(), model_name)
-    model = NeuralNetwork(num_frames=num_frames_long)
+    model = NeuralNetwork(num_frames=num_frames_max)
     model.load_state_dict(torch.load(model_name))
 
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1)
