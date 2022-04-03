@@ -3,6 +3,7 @@ import random
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch.nn.functional
 import torch.utils.data
 import torchinfo
@@ -16,12 +17,11 @@ import torchvision.transforms
 # TODO: implement chamfer similarity calculation.
 
 class CustomImageDataset(torch.utils.data.Dataset):
-    def __init__(self, combinations, similarities, pattern_dir, transform):
-        if len(combinations) != len(similarities):
-            raise ValueError('Number of combinations and similarity scores do not match.')
+    def __init__(self, similarity_scores, pattern_dir, transform):
+        self.patterns0_all = similarity_scores['pattern0'].to_numpy()
+        self.patterns1_all = similarity_scores['pattern1'].to_numpy()
+        self.similarities = similarity_scores['similarity'].to_numpy()
 
-        self.combinations = combinations
-        self.similarities = similarities
         self.pattern_dir = pattern_dir
 
         self.transform = transform
@@ -30,8 +30,8 @@ class CustomImageDataset(torch.utils.data.Dataset):
         return len(self.similarities)
 
     def __getitem__(self, idx):
-        pattern0_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.combinations[idx][0]))
-        pattern1_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.combinations[idx][1]))
+        pattern0_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.patterns0_all[idx]))
+        pattern1_path = os.path.join(self.pattern_dir, 'p_{}.npy'.format(self.patterns1_all[idx]))
 
         pattern0 = np.load(pattern0_path)
         pattern1 = np.load(pattern1_path)
@@ -159,20 +159,12 @@ def validate(dataloader, model, loss_fn, device):
 def main():
     num_frames_max = 80
 
-    combinations = [(1, 2), (1, 3), (1, 4), (1, 5),
-                    (2, 3), (2, 4), (2, 5),
-                    (3, 4), (3, 5),
-                    (4, 5)]
+    # Example similarity scores from VISIL model.
+    similarity_scores = pd.read_csv('data/similarity_scores.csv')
 
-    # Guessed similarities.
-    similarities = [0.5, 0.1, 0.8, 0.4,
-                    0.9, 0.4, 0.1,
-                    0.5, 0.1,
-                    0.3]
+    pattern_dir = 'data/patterns/'
 
-    pattern_dir = 'data'
-
-    dataset = CustomImageDataset(combinations, similarities, pattern_dir,
+    dataset = CustomImageDataset(similarity_scores, pattern_dir,
                                  transform=torchvision.transforms.Compose([RandomPadding(num_frames_max, 6, 4)]))
 
     train_val_test_split = [0.6, 0.2, 0.2]
@@ -238,7 +230,7 @@ def main():
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Average loss')
     ax.legend()
-    ax.set_ylim(bottom=0, top=1)
+    ax.set_ylim(bottom=0)
     plt.show()
 
     model_name = 'model.pth'
@@ -254,11 +246,10 @@ def main():
             prediction = model(x0.float(), x1.float())
             prediction_item = prediction.item()
             true_value_item = true_value.item()
-            print(f'Prediction: {prediction_item:.2f}, true value: {true_value_item:.2f}')
             errors.append(prediction_item - true_value_item)
 
     fig, ax = plt.subplots()
-    ax.hist(errors, bins=200, range=(-1, 1))
+    ax.hist(errors, range=(-1, 1))
     ax.set_xlabel('Errors')
     ax.set_ylabel('Number of occurences')
     plt.show()
