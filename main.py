@@ -79,16 +79,15 @@ class NeuralNetwork(torch.nn.Module):
         super(NeuralNetwork, self).__init__()
 
         self.layers_individual = torch.nn.Sequential(
-            torch.nn.Conv3d(1, 8, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
+            torch.nn.Conv3d(1, 8, kernel_size=(7, 3, 3), stride=(1, 1, 1), padding=(3, 1, 1)),
             torch.nn.LeakyReLU(),
-            torch.nn.Conv3d(8, 16, kernel_size=(3, 1, 1), stride=(1, 1, 1), padding=(1, 0, 0)),
+            torch.nn.Conv3d(8, 16, kernel_size=(7, 3, 3), stride=(1, 1, 1), padding=(3, 1, 1)),
             torch.nn.LeakyReLU(),
-            torch.nn.MaxPool3d(kernel_size=(2, 1, 1), stride=(2, 1, 1)),
         )
 
         self.layers_individual_embedding = torch.nn.Sequential(
             torch.nn.Flatten(),
-            torch.nn.Linear(16 * round(num_frames / 2) * 6 * 4, 100),
+            torch.nn.Linear(16 * num_frames * 6 * 4, 100),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(100, 25),
         )
