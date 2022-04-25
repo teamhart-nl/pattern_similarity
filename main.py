@@ -78,27 +78,22 @@ class NeuralNetwork(torch.nn.Module):
     def __init__(self, num_frames):
         super(NeuralNetwork, self).__init__()
 
-        self.layers_individual = torch.nn.Sequential(
+        self.layers = torch.nn.Sequential(
             torch.nn.Conv3d(1, 8, kernel_size=(7, 3, 3), stride=(1, 1, 1), padding=(3, 1, 1)),
             torch.nn.LeakyReLU(),
             torch.nn.Conv3d(8, 16, kernel_size=(7, 3, 3), stride=(1, 1, 1), padding=(3, 1, 1)),
             torch.nn.LeakyReLU(),
-        )
-
-        self.layers_individual_embedding = torch.nn.Sequential(
             torch.nn.Flatten(),
             torch.nn.Linear(16 * num_frames * 6 * 4, 100),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(100, 25),
         )
+
         self.pairwise_distance = torch.nn.PairwiseDistance()
 
     def forward(self, x0, x1):
-        x0 = self.layers_individual(x0)
-        x1 = self.layers_individual(x1)
-
-        x0 = self.layers_individual_embedding(x0)
-        x1 = self.layers_individual_embedding(x1)
+        x0 = self.layers(x0)
+        x1 = self.layers(x1)
 
         x0 = torch.nn.functional.normalize(x0)
         x1 = torch.nn.functional.normalize(x1)
@@ -210,7 +205,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters())
 
-    num_epochs = 50
+    num_epochs = 20
     epochs = np.arange(1, num_epochs + 1)
     training_losses = np.zeros(num_epochs)
     validation_losses = np.zeros(num_epochs)
